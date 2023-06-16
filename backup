@@ -1,0 +1,90 @@
+#!/bin/bash
+
+# Check if the user has entered exactly 3 arguments
+if [ $# -ne 3 ]
+then
+	echo "Usage: backup <source_directory> <target_directory> <mode: { test | prod }>"
+	echo "Please try again."
+	exit 1
+fi
+
+# Check to see if rsync is installed
+if ! command -v rsync > /dev/null 2>&1
+then
+	echo "This script requires rsync to be installed."
+	echo "Please install it and try again."
+	exit 2
+fi
+
+# Remove '/' characters from the end of the directories paths
+# to keep consistency in the behavior of the script
+src_dir=$1
+tar_dir=$2
+while echo -n $src_dir | grep -q '/$'
+do
+        src_dir=$(echo -n $src_dir | sed "s/\/$//")
+done
+
+while echo -n $tar_dir | grep -q '/$'
+do
+        tar_dir=$(echo -n $tar_dir | sed "s/\/$//")
+done
+
+# Capture the current date and store it in the format YYYY-MM-DD
+current_date=$(date +%Y-%m-%d)
+
+# -a : Keeps permissions and properties
+# -v : Verbose mode to output info
+# -b : Specifies to backup extraneous files/folders
+# --backup-dir: Specifies a folder to store the extraneous files/folders
+# --delete : Remove additional folders/files in the target directory
+# --dry-run : Only simulate the execution but does not apply any change
+case $3 in
+	test) rsync_options="-avb --backup-dir $tar_dir/$current_date --delete --dry-run";;
+	prod) rsync_options="-avb --backup-dir $tar_dir/$current_date --delete";;
+	*) echo "The mode parameter should either be 'test' or 'prod'"
+	   exit 3
+	   ;;
+esac
+
+# Creation of the execution logs with current date and time
+backup_log=/var/log/backup_$current_date.log
+backup_errors_log=/var/log/backup_errors_$current_date.log
+current_date_time=$(date --rfc-3339=seconds)
+
+echo "" >> $backup_log
+echo "                >>> $current_date_time <<<" >> $backup_log
+echo "" >> $backup_log
+echo "Backuping $src_dir to $tar_dir/current..." >> $backup_log
+echo "" >> $backup_log
+
+echo "" >> $backup_errors_log
+echo "                >>> $current_date_time <<<" >> $backup_errors_log
+echo "" >> $backup_errors_log
+echo "Errors when backuping $src_dir to $tar_dir/current:" >> $backup_errors_log
+echo "" >> $backup_errors_log
+
+# Run rsync and stores its exit code
+$(which rsync) $rsync_options $src_dir $tar_dir/current 1>>$backup_log 2>>$backup_errors_log
+
+rsync_Ecode=$?
+
+# Check if any errors ocurred during rsync execution
+if [ $rsync_Ecode -ne 0 ]
+then
+	echo "An error ocurred, rsync exited with $rsync_Ecode"
+	exit $rsync_Ecode
+else
+	echo "			  No errors" >> $backup_errors_log
+	exit 0
+fi
+
+
+
+
+
+
+
+
+
+
